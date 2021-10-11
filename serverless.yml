@@ -32,6 +32,7 @@ provider:
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
     GROUPS_TABLE: Groups-${self:provider.stage}
     IMAGES_TABLE: Images-${self:provider.stage}
+    IMAGE_ID_INDEX: ImageIdIndex
 
   stage: ${opt:stage, 'dev'}
   region: ${opt:region, 'us-west-1'}
@@ -46,6 +47,10 @@ provider:
       Action:
         - dynamodb:Query
       Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.IMAGES_TABLE}
+    - Effect: Allow
+      Action: 
+        - dynamodb:Query
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.IMAGES_TABLE}/index/${self:provider.environment.IMAGE_ID_INDEX} 
 
 functions:
  GetGroups: 
@@ -68,12 +73,19 @@ functions:
             description: Create a new group
             requestModels:
               'application/json': GroupRequest
-  GetImages:
-    handler: src/lambda/http/getImages.handler
-    events:
+ GetImages:
+  handler: src/lambda/http/getImages.handler
+  events:
       - http:
           method: get
           path: groups/{groupId}/images
+          cors: true
+ GetImage:
+  handler: src/lambda/http/getImage.handler
+  events:
+      - http:
+          method: get
+          path: images/{imageId}
           cors: true
 
 resources:
@@ -108,10 +120,19 @@ resources:
             AttributeType: S
           - AttributeName: timestamp
             AttributeType: S
+          - AttributeName: imageId
+            AttributeType: S
         KeySchema:
           - AttributeName: groupId
             KeyType: HASH
           - AttributeName: timestamp
             KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.IMAGE_ID_INDEX}
+            KeySchema:
+            - AttributeName: imageId
+              KeyType: HASH
+            Projection:
+              ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
         TableName: ${self:provider.environment.IMAGES_TABLE}
