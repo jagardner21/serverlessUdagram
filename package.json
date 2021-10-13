@@ -7,6 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "elasticsearch": "^16.7.2",
+    "http-aws-es": "^6.0.0",
     "source-map-support": "^0.5.10"
   },
   "devDependencies": {
@@ -19,7 +21,6 @@
     "serverless-reqvalidator-plugin": "1.0.3",
     "serverless-webpack": "^5.2.0",
     "ts-loader": "^5.3.3",
-    
     "typescript": "^3.2.4",
     "webpack": "^4.29.0",
     "webpack-node-externals": "^1.7.2"
