@@ -1,52 +1,25 @@
 service:
   name: udagramserverless
-# app and org for use with dashboard.serverless.com
-#app: your-app-name
-#org: your-org-name
 
-custom: 
-  webpack:
-    webpackConfig: ./webpack.config.js
-    includeModules: true
-  topicName: imagesTopic-${self:provider.stage}
-  documentation: 
-    api:
-      info:
-        versoin: v1.0.0
-        title: Udagram API
-        description: Serverless Udagram application for image sharing.
-    models: 
-      - name: GroupRequest
-        contentType: application/json
-        schema: ${file(models/create-group-request.json)}
-      - name: ImageRequest
-        contentType: application/json
-        schema: ${file(models/create-image-request.json)}
-
-# Add the serverless-webpack plugin
 plugins:
-  - serverless-esbuild
+  - serverless-webpack
   - serverless-reqvalidator-plugin
   - serverless-aws-documentation
-  - serverless-webpack
 
 provider:
   name: aws
   runtime: nodejs12.x
-  apiGateway:
-    minimumCompressionSize: 1024 # Enable gzip compression for responses > 1 KB
-
-  environment:
-    AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
-    GROUPS_TABLE: Groups-${self:provider.stage}
-    IMAGES_TABLE: Images-${self:provider.stage}
-    CONNECTIONS_TABLE: Connections-${self:provider.stage}
-    IMAGE_ID_INDEX: ImageIdIndex
-    IMAGES_S3_BUCKET: serverless-udagram-images-gard-${self:provider.stage}
-    SIGNED_URL_EXPIRATION: 300
 
   stage: ${opt:stage, 'dev'}
   region: ${opt:region, 'us-west-1'}
+
+  environment:
+    GROUPS_TABLE: Groups-${self:provider.stage}
+    IMAGES_TABLE: Images-${self:provider.stage}
+    IMAGE_ID_INDEX: ImageIdIndex
+    CONNECTIONS_TABLE: Connections-${self:provider.stage}
+    IMAGES_S3_BUCKET: serverless-udagram-images-gard-${self:provider.stage}
+
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -56,13 +29,13 @@ provider:
       Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.GROUPS_TABLE}
     - Effect: Allow
       Action:
-        - dynamodb:Query
         - dynamodb:PutItem
+        - dynamodb:Query
       Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.IMAGES_TABLE}
     - Effect: Allow
-      Action: 
+      Action:
         - dynamodb:Query
-      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.IMAGES_TABLE}/index/${self:provider.environment.IMAGE_ID_INDEX} 
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.IMAGES_TABLE}/index/${self:provider.environment.IMAGE_ID_INDEX}
     - Effect: Allow
       Action:
         - s3:PutObject
@@ -75,55 +48,77 @@ provider:
         - dynamodb:DeleteItem
       Resource: arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.CONNECTIONS_TABLE}
 
+custom:
+  topicName: imagesTopic-${self:provider.stage}
+  documentation:
+    api:
+      info:
+        version: v1.0.0
+        title: Udagram API
+        description: Serverless application for images sharing
+    models:
+      - name: GroupRequest
+        contentType: application/json
+        schema: ${file(models/create-group-request.json)}
+      - name: ImageRequest
+        contentType: application/json
+        schema: ${file(models/create-image-request.json)}
+
 functions:
- GetGroups: 
-  handler: src/lambda/http/getGroups.handler
-  events:
+
+  GetGroups:
+    handler: src/lambda/http/getGroups.handler
+    events:
       - http:
           method: get
           path: groups
           cors: true
- CreateGroup: 
-  handler: src/lambda/http/createGroup.handler
-  events: 
+
+  CreateGroup:
+    handler: src/lambda/http/createGroup.handler
+    events:
       - http:
           method: post
           path: groups
           cors: true
           reqValidatorName: RequestBodyValidator
-          documentation: 
+          documentation:
             summary: Create a new group
             description: Create a new group
             requestModels:
               'application/json': GroupRequest
- GetImages:
-  handler: src/lambda/http/getImages.handler
-  events:
-      - http:
-          method: get
-          path: groups/{groupId}/images
-          cors: true
- GetImage:
-  handler: src/lambda/http/getImage.handler
-  events:
+
+  GetImage:
+    handler: src/lambda/http/getImage.handler
+    events:
       - http:
           method: get
           path: images/{imageId}
           cors: true
- CreateImage: 
-  handler: src/lambda/http/createImage.handler
-  events: 
+
+  GetImages:
+    handler: src/lambda/http/getImages.handler
+    events:
+      - http:
+          method: get
+          path: groups/{groupId}/images
+          cors: true
+
+  CreateImage:
+    handler: src/lambda/http/createImage.handler
+    events:
       - http:
           method: post
           path: groups/{groupId}/images
           cors: true
           reqValidatorName: RequestBodyValidator
-          documentation: 
+          documentation:
             summary: Create a new image
             description: Create a new image
             requestModels:
               'application/json': ImageRequest
- SendUploadNotifications:
+
+  SendUploadNotifications:
     environment:
       STAGE: ${self:provider.stage}
       API_ID:
@@ -139,6 +134,27 @@ functions:
                 - Ref: AWS::AccountId
                 - ${self:custom.topicName}
           topicName: ${self:custom.topicName}
+
+  ConnectHandler:
+    handler: src/lambda/websocket/connect.handler
+    events:
+      - websocket:
+          route: $connect
+
+  DisconnectHandler:
+    handler: src/lambda/websocket/disconnect.handler
+    events:
+      - websocket:
+          route: $disconnect
+
+  # SyncWithElasticsearch:
+  #   environment:
+  #     ES_ENDPOINT: !GetAtt ImagesSearch.DomainEndpoint
+  #   handler: src/lambda/dynamoDb/elasticSearchSync.handler
+  #   events:
+  #     - stream:
+  #         type: dynamodb
+  #         arn: !GetAtt ImagesDynamoDBTable.StreamArn
 
 resources:
   Resources:
@@ -262,3 +278,29 @@ resources:
       Properties:
         DisplayName: Image bucket topic
         TopicName: ${self:custom.topicName}
+
+    # ImagesSearch:
+    #   Type: AWS::Elasticsearch::Domain
+    #   Properties:
+    #     ElasticsearchVersion: '6.3'
+    #     DomainName: images-search-${self:provider.stage}
+    #     ElasticsearchClusterConfig:
+    #       DedicatedMasterEnabled: false
+    #       InstanceCount: '1'
+    #       ZoneAwarenessEnabled: false
+    #       InstanceType: t2.small.elasticsearch
+    #     EBSOptions:
+    #       EBSEnabled: true
+    #       Iops: 0
+    #       VolumeSize: 10
+    #       VolumeType: 'gp2'
+
+    #     AccessPolicies:
+    #       Version: '2012-10-17'
+    #       Statement:
+    #         -
+    #           Effect: Allow
+    #           Principal:
+    #             AWS: '*'
+    #           Action: 'es:*'
+    #           Resource: '*'
