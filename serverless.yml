@@ -5,6 +5,9 @@ service:
 #org: your-org-name
 
 custom: 
+  webpack:
+    webpackConfig: ./webpack.config.js
+    includeModules: true
   topicName: imagesTopic-${self:provider.stage}
   documentation: 
     api:
@@ -25,6 +28,7 @@ plugins:
   - serverless-esbuild
   - serverless-reqvalidator-plugin
   - serverless-aws-documentation
+  - serverless-webpack
 
 provider:
   name: aws
@@ -151,7 +155,7 @@ resources:
         TableName: ${self:provider.environment.GROUPS_TABLE}
 
     ImagesDynamoDBTable:
-      Type: "AWS::DynamoDB::Table"
+      Type: AWS::DynamoDB::Table
       Properties:
         AttributeDefinitions:
           - AttributeName: groupId
@@ -181,12 +185,10 @@ resources:
       Type: AWS::DynamoDB::Table
       Properties:
         AttributeDefinitions:
-          -
-            AttributeName: id
+          - AttributeName: id
             AttributeType: S
         KeySchema:
-          -
-            AttributeName: id
+          - AttributeName: id
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
         TableName: ${self:provider.environment.CONNECTIONS_TABLE}
@@ -211,8 +213,7 @@ resources:
               Topic: !Ref ImagesTopic
         CorsConfiguration:
           CorsRules:
-            -
-              AllowedOrigins:
+            - AllowedOrigins:
                 - '*'
               AllowedHeaders:
                 - '*'
